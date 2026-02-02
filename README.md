@@ -1,90 +1,318 @@
-# Obsidian Sample Plugin
+# note-deep-researcher
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+Simple “Deep Research” runner for Obsidian notes.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+This plugin lets you manually run a Gemini-based deep research workflow against the **currently active note** and save the resulting research report into your Vault.
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open modal (simple)" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+The plugin name is `note-deep-researcher`.
 
-## First time developing plugins?
+---
 
-Quick starting guide for new plugin devs:
+## Overview
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+- **Trigger**
+  - Ribbon icon
+  - Command palette command: `Run Deep Research on active note`
+- **Target**
+  - The currently active note (Markdown file)
+- **Output**
+  - A Markdown report saved under a folder named after the active note
 
-## Releasing new releases
+This README describes the intended behavior and user-facing configuration.
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+Long-running research is handled via Gemini **background execution**. The plugin stores the active `interactionId` so it can resume result collection after Obsidian restarts.
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+---
 
-## Adding your plugin to the community plugin list
+## Scope
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+| In scope | Out of scope |
+|---------|------------|
+| Manually run research for the active note | |
+| Ribbon icon + command palette entry | Coupling to any other plugin/workflow |
+| Web sources only (Gemini Deep Research) | Searching across your Vault |
+| Save a Markdown report into noteBaseName directory in the Vault | |
+| Single active run at a time (simplify UX/implementation) | Managing multiple concurrent runs |
+
+---
+
+## Requirements
+
+- **Obsidian**
+  - Desktop app (recommended).
+- **Gemini API credentials**
+  - Provided via environment variables (see below).
+- **Prompt file**
+  - A Vault-relative Markdown/text file used as a fixed instruction prompt.
+
+---
+
+## Inputs
+
+- **Deep Research instructions**
+  - The content of the file configured by `deepResearchPromptPath` (fixed prompt).
+- **Note context**
+  - The full body of the active note.
+
+---
+
+## Outputs
+
+- **Directory**: `<noteBaseName>/`
+  - `<noteBaseName>`: active note filename without extension
+  - If the directory does not exist, the plugin creates it.
+- **Report file**: `<noteBaseName>_deep_research.md`
+  - Full path: `<noteBaseName>/<noteBaseName>_deep_research.md`
+- **Report header template**:
+  ```markdown
+  # <noteBaseName> deep research report
+  ## <timestamp>
+  ```
+  - `<timestamp>`: ISO 8601 format (e.g., `2025-01-15T10:30:00+09:00`)
+- **Overwrite behavior**
+  - Re-runs overwrite `<noteBaseName>_deep_research.md`.
+- **Prompt scope**
+  - Global only (no per-note overrides).
+
+### Run concurrency
+
+- Only **one** Deep Research run can be active at a time.
+- If a run is already in progress and the user triggers the command again, the plugin proceeds Reset / Abandon the current run. See below for details.
+
+### Example
+
+If the active note is `my-note.md`, the report is saved to:
+
+`my-note/my-note_deep_research.md`
+
+---
+
+## Settings (`MyPluginSettings`)
+
+| Name | Type | Default | Description |
+|--------|---|---------|------|
+| `deepResearchEnabled` | boolean | false | Enable/disable this feature |
+| `deepResearchPromptPath` | string | - | Vault-relative path to a prompt file used for Deep Research |
+| `deepResearchNoticeIntervalSec` | number | 5 | How often to show “in progress” notices (seconds) |
+| `deepResearchCheckIntervalSec` | number | 60 | How often to poll `interactions.get()` for the active run (seconds) |
+| `deepResearchEnvFilePath` | string | - | Absolute path to an external `.env` file (outside the Vault) |
+
+### Prompt file format (recommended)
+
+The prompt file can be plain text or Markdown. Keep it stable and version-controlled.
+
+Example:
+
+```text
+You are a research assistant.
+
+Read the provided note context and produce a deep research report.
+
+Constraints:
+- Focus on web sources.
+- Provide citations/links.
+- Return Markdown.
+```
+
+---
+
+## Environment variables (Gemini-only)
+
+The plugin reads credentials from an **external `.env` file** configured via `deepResearchEnvFilePath`.
+This file must be outside your Vault (so secrets are not stored in your notes).
+
+### Example `.env`
+
+Create a file outside the Vault, for example:
+
+- Linux: `/home/<user>/.config/note-deep-researcher/.env`
+- macOS: `/Users/<user>/.config/note-deep-researcher/.env`
+- Windows: `C:\Users\<user>\AppData\Roaming\note-deep-researcher\\.env`
+
+Contents:
+
+```dotenv
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=...
+GEMINI_MODEL=...
+```
+
+### Behavior
+
+- If `LLM_PROVIDER != gemini`, the run is blocked (Notice + log).
+- If `GEMINI_API_KEY` or `GEMINI_MODEL` is missing, the run is blocked (Notice + log).
+
+### Security
+
+- Never write `GEMINI_API_KEY` to logs.
+- Do not store credentials in the Vault.
+- Keep the `.env` file readable only by your OS user when possible.
+
+---
+
+## Installation
+
+Once implemented, document the standard Obsidian plugin installation steps here.
+
+For a manual install (developer builds), the typical approach is:
+
+1. Build the plugin bundle.
+2. Copy the built output into:
+   - `<vault>/.obsidian/plugins/note_deep_researcher/`
+3. Enable the plugin in Obsidian settings.
+
+(Exact steps depend on your build tooling; document them once the code exists.)
+
+---
 
 ## How to use
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+1. Open the note you want to research.
+2. Trigger the plugin:
+   - Click the ribbon icon, or
+   - Run the command: `Run Deep Research on active note`
+3. Wait until the plugin completes.
+4. The report will be created/updated under `<noteBaseName>/<noteBaseName>_deep_research.md`.
 
-## Manually installing the plugin
+### Reset / Abandon
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+- This plugin does **not** guarantee Gemini-side job cancellation.
+- Instead, it provides a single **Reset / Abandon** action that clears the locally stored pending run (so you can start a new one).
 
-## Improve code quality with eslint
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
-- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
-- A GitHub action is preconfigured to automatically lint every commit on all branches.
+#### How users invoke Reset / Abandon
 
-## Funding URL
+- **Command palette**
+  - `Deep Research: Reset / Abandon current run`
+- **Ribbon icon while running**
+  - If a run is already in progress and the user clicks the ribbon icon, show a confirmation UI:
+    - Message: `Deep Research is running for <note name>. Abandon it?`
+    - Buttons: `Abandon` / `Keep running`
+  - If the user selects `Abandon`, clear the local pending state and show a Notice.
 
-You can include funding URLs where people who use your plugin can financially support it.
+---
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+## Processing flow
 
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
+```mermaid
+flowchart TD
+    A[User triggers from ribbon / command palette] --> B[Resolve active note]
+    B --> C{Active note exists?}
+    C -->|No| D[Abort]
+    C -->|Yes| E[Validate settings]
+    
+    E --> F{deepResearchEnabled?}
+    F -->|false| G[Abort with Notice]
+    F -->|true| H{deepResearchPromptPath exists?}
+    H -->|No| I[Abort with Notice]
+    H -->|Yes| J{deepResearchEnvFilePath exists?}
+    J -->|No| K[Abort with Notice]
+    J -->|Yes| L[Read environment]
+    
+    L --> M{LLM_PROVIDER = gemini?}
+    M -->|No| N[Abort with Notice]
+    M -->|Yes| O{GEMINI_API_KEY & GEMINI_MODEL exist?}
+    O -->|No| P[Abort with Notice]
+    O -->|Yes| Q[Extract context - Note body]
+    
+    Q --> R[Read prompt file]
+    R --> S[Call Gemini Deep Research]
+    S --> T[Show periodic 'in progress' Notice every N seconds]
+    T --> U[Write report to noteBaseName/noteBaseName_deep_research.md]
+    U --> V[Show completion Notice]
+    V --> W[End - Do not auto-open report]
 ```
 
-If you have multiple URLs, you can also do:
+---
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
-```
+## Logging / reasons
 
-## API Documentation
+Each run should emit a single “result” log entry with a `reason` code. Keep logs **non-sensitive**.
 
-See https://docs.obsidian.md
+**Log destination**: `<vault>/.obsidian/plugins/note-deep-researcher/note-deep-researcher.log`
+
+| reason | 説明 |
+|--------|-----|
+| `DR_DISABLED` | Aborted because feature is disabled |
+| `DR_NO_ACTIVE_NOTE` | No active note |
+| `DR_PROMPT_PATH_MISSING` | `deepResearchPromptPath` not set |
+| `DR_ENV_PATH_MISSING` | `deepResearchEnvFilePath` not set |
+| `DR_PROMPT_READ_FAILED` | Failed to read prompt file |
+| `DR_ENV_READ_FAILED` | Failed to read environment variables |
+| `DR_PROVIDER_NOT_GEMINI` | `LLM_PROVIDER!=gemini` |
+| `DR_GEMINI_KEY_MISSING` | Missing `GEMINI_API_KEY` |
+| `DR_GEMINI_MODEL_MISSING` | Missing `GEMINI_MODEL` |
+| `DR_REQUEST_FAILED` | Gemini request failed |
+| `DR_WRITE_FAILED` | Failed to write report |
+| `DR_OK` | Success |
+
+---
+
+## Error handling expectations
+
+- The plugin should fail fast on configuration/credential issues.
+- Network/API failures should produce a clear Notice and a single non-sensitive log entry.
+- If writing the report fails, do not partially overwrite the existing file; write to a temporary path then replace.
+
+---
+
+## Implementation notes
+
+### Provider interface
+
+Define a provider interface to keep the orchestration testable:
+
+- `DeepResearchProvider.run(params) -> markdownReport`
+
+### Gemini implementation
+
+Implement `GeminiDeepResearchProvider` to call the Gemini API.
+
+Important constraints:
+
+- Do not log prompts, note contents, or API responses verbatim unless explicitly enabled for debugging.
+- Consider rate limits, latency, and potential costs.
+- Prefer a local **Reset / Abandon** command over “cancel,” since Gemini-side cancellation may not be available.
+
+### Orchestration
+
+Create `src/deep_research.ts` to:
+
+- validate inputs/settings
+- assemble context
+- call provider
+- write output
+
+---
+
+## Development checklist
+
+1. Add settings: `deepResearchEnabled`, `deepResearchPromptPath`, `deepResearchNoticeIntervalSec`
+2. Add ribbon icon via `addRibbonIcon`
+3. Add command: `Run Deep Research on active note`
+4. Implement `DeepResearchProvider`
+5. Implement `GeminiDeepResearchProvider`
+6. Implement orchestration in `src/deep_research_simple.ts`
+7. Integrate with existing logger + Notice patterns
+8. Manual QA for each `reason` case
+
+---
+
+## Privacy & security
+
+- This feature sends (parts of) your note content to an external LLM provider (Gemini).
+- Avoid running on notes that contain secrets.
+- Make it explicit in UI/README that note content may be transmitted to Gemini.
+- Ensure logs never include:
+  - API keys
+  - full note contents
+  - full model responses
+
+---
+
+## Acceptance criteria
+
+- Can run Deep Research on the active note via ribbon/command.
+- If Gemini credentials are missing, abort with Notice + log.
+- On success, create/update the Markdown report and show a completion Notice.
+- Logs must not contain sensitive information.
+
