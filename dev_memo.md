@@ -69,4 +69,35 @@
   "deepResearchEnvFilePath": "/home/kunihiros/.config/note-deep-researcher/.env", # `~` 展開がされないので、絶対パス指定
   "currentRun": null
 }
+
 ```
+
+---
+
+## Date
+- 2026-02-05 23:01
+
+## 進捗（追記）
+- **Gemini Deep Research（Interactions API）連携を本実装**
+  - `GeminiDeepResearchProvider` をモックから実API呼び出しに置換
+  - `.env` 必須: `GEMINI_API_KEY`（`GEMINI_AGENT` は任意）
+- **UI文言の表記揺れを統一（sentence case）**
+  - `Notice` / モーダルの表示文言を `Deep research ...` に統一（処理ロジックは変更なし）
+- **ビルド確認**
+  - `npm run build` が成功することを確認
+
+## リリース準備状況（初回Community提出の準備）
+- `manifest.json`
+  - `id: note-deep-researcher`（最終決定）
+  - `version: 1.0.0`
+  - `minAppVersion: 0.15.0`
+- `versions.json`
+  - `"1.0.0": "0.15.0"` を確認
+- GitHub Release
+  - https://github.com/KunihiroS/note-deep-researcher/releases/tag/1.0.0
+- GitHub Release 作成時に添付するファイル
+  - `main.js`
+  - `manifest.json`
+  - `styles.css`（存在する場合）
+- Community catalog（obsidianmd/obsidian-releases）へのPR
+  - 別プラグインの審査が完了してから実施する（並行PRはしない）
