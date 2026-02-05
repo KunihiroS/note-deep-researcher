@@ -1,95 +1,141 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import {App, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
+import {DEFAULT_SETTINGS, NoteDeepResearcherSettings, DeepResearchSettingTab} from "./settings";
+import { DeepResearchService } from "./deep_research";
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class NoteDeepResearcherPlugin extends Plugin {
+	settings: NoteDeepResearcherSettings;
+	service: DeepResearchService;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+		this.service = new DeepResearchService(this.app, this);
+
+		// Ribbon Icon
+		this.addRibbonIcon('search', 'Run deep research on active note', (evt: MouseEvent) => {
+			void this.runDeepResearch();
 		});
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
+		// Command
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
+			id: 'run-deep-research',
+			name: 'Run deep research on active note',
 			checkCallback: (checking: boolean) => {
-				// Conditions to check
 				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
 					if (!checking) {
-						new SampleModal(this.app).open();
+						void this.runDeepResearch();
 					}
-
-					// This command will only show up in Command Palette when the check function returns true
 					return true;
 				}
 				return false;
 			}
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
+		// Command to reset/abandon
+		this.addCommand({
+			id: 'reset-abandon-deep-research',
+			name: 'Reset / abandon current run',
+			callback: () => {
+				void this.resetAbandonRun();
+			}
 		});
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 
+		// Settings Tab
+		this.addSettingTab(new DeepResearchSettingTab(this.app, this));
+
+		// Resume polling if needed
+		if (this.settings.currentRun) {
+			this.service.startPolling();
+		}
 	}
 
 	onunload() {
+		if (this.service) {
+			this.service.stopPolling();
+		}
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<NoteDeepResearcherSettings>);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	async runDeepResearch() {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) {
+			new Notice('No active note found.');
+			return;
+		}
+		
+		// If already running, show confirmation (as per README)
+		// "If a run is already in progress and the user triggers the command again, the plugin proceeds Reset / Abandon the current run. See below for details."
+		// Actually README says: "If a run is already in progress and the user clicks the ribbon icon, show a confirmation UI"
+		// But for command palette: "Deep Research: Reset / Abandon current run" is separate. 
+		// "If a run is already in progress and the user triggers the command again, the plugin proceeds Reset / Abandon the current run" -> This sentence in README is a bit ambiguous/conflicting with "Reset / Abandon" section.
+		// Let's follow the "Ribbon icon while running" logic for general entry if running.
+		
+		if (this.settings.currentRun) {
+			// Show confirmation
+			// Since we can't easily pop a native confirmation dialog with custom buttons in Obsidian API simply (without custom Modal),
+			// I'll implement a simple Modal for confirmation.
+			new ConfirmationModal(this.app, 
+				`Deep Research is running for ${this.settings.currentRun.noteBasename}. Abandon it?`,
+				'Abandon',
+				'Keep running',
+				async () => {
+					await this.service.resetAbandonRun();
+					// Do we start new one immediately? README says "clear the local pending state".
+					// It doesn't explicitly say "and start new one". 
+					// But usually if I click "Run", I want to run.
+					// However, for safety, let's just abandon first. The user can click again.
+				}
+			).open();
+			return;
+		}
+
+		await this.service.startResearch(activeFile);
+	}
+
+	async resetAbandonRun() {
+		await this.service.resetAbandonRun();
+	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
+class ConfirmationModal extends Modal {
+	message: string;
+	confirmText: string;
+	cancelText: string;
+	onConfirm: () => void | Promise<void>;
+
+	constructor(app: App, message: string, confirmText: string, cancelText: string, onConfirm: () => void | Promise<void>) {
 		super(app);
+		this.message = message;
+		this.confirmText = confirmText;
+		this.cancelText = cancelText;
+		this.onConfirm = onConfirm;
 	}
 
 	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
+		const {contentEl} = this;
+		contentEl.createEl('h3', {text: this.message});
+
+		const div = contentEl.createDiv({cls: 'modal-button-container'});
+		
+		const confirmBtn = div.createEl('button', {text: this.confirmText, cls: 'mod-warning'});
+		confirmBtn.addEventListener('click', () => {
+			void this.onConfirm();
+			this.close();
+		});
+
+		const cancelBtn = div.createEl('button', {text: this.cancelText});
+		cancelBtn.addEventListener('click', () => {
+			this.close();
+		});
 	}
 
 	onClose() {
