@@ -87,7 +87,7 @@ If the active note is `my-note.md`, the report is saved to:
 
 ---
 
-## Settings (`MyPluginSettings`)
+## Settings (`NoteDeepResearcherSettings`)
 
 | Name | Type | Default | Description |
 |--------|---|---------|------|
@@ -153,16 +153,19 @@ GEMINI_AGENT=deep-research-pro-preview-12-2025
 
 ## Installation
 
-Once implemented, document the standard Obsidian plugin installation steps here.
+### Manual install (developer build)
 
-For a manual install (developer builds), the typical approach is:
-
-1. Build the plugin bundle.
-2. Copy the built output into:
-   - `<vault>/.obsidian/plugins/note_deep_researcher/`
-3. Enable the plugin in Obsidian settings.
-
-(Exact steps depend on your build tooling; document them once the code exists.)
+1. Build the plugin bundle:
+   - `npm install`
+   - `npm run build`
+2. Copy the release artifacts into your Vault:
+   - `<vault>/.obsidian/plugins/note-deep-researcher/`
+   - Required files:
+     - `main.js`
+     - `manifest.json`
+     - `styles.css` (if present)
+3. In Obsidian, enable the plugin:
+   - **Settings → Community plugins**
 
 ---
 
@@ -211,7 +214,7 @@ flowchart TD
     
     L --> M{LLM_PROVIDER = gemini?}
     M -->|No| N[Abort with Notice]
-    M -->|Yes| O{GEMINI_API_KEY & GEMINI_MODEL exist?}
+    M -->|Yes| O{GEMINI_API_KEY exists?}
     O -->|No| P[Abort with Notice]
     O -->|Yes| Q[Extract context - Note body]
     
@@ -234,16 +237,15 @@ Each run should emit a single “result” log entry with a `reason` code. Keep 
 | reason | 説明 |
 |--------|-----|
 | `DR_DISABLED` | Aborted because feature is disabled |
-| `DR_NO_ACTIVE_NOTE` | No active note |
 | `DR_PROMPT_PATH_MISSING` | `deepResearchPromptPath` not set |
 | `DR_ENV_PATH_MISSING` | `deepResearchEnvFilePath` not set |
+| `DR_INIT_FAILED` | Provider initialization failed |
 | `DR_PROMPT_READ_FAILED` | Failed to read prompt file |
-| `DR_ENV_READ_FAILED` | Failed to read environment variables |
-| `DR_PROVIDER_NOT_GEMINI` | `LLM_PROVIDER!=gemini` |
-| `DR_GEMINI_KEY_MISSING` | Missing `GEMINI_API_KEY` |
-| `DR_GEMINI_MODEL_MISSING` | Missing `GEMINI_MODEL` |
-| `DR_REQUEST_FAILED` | Gemini request failed |
-| `DR_WRITE_FAILED` | Failed to write report |
+| `DR_NOTE_READ_FAILED` | Failed to read the active note |
+| `DR_STARTED` | Started a run and stored the `interactionId` |
+| `DR_ABANDONED` | User abandoned the current run (local state cleared) |
+| `DR_REQUEST_FAILED` | Gemini request failed or the run failed |
+| `DR_WRITE_FAILED` | Completed but failed to write report |
 | `DR_OK` | Success |
 
 ---
@@ -252,7 +254,7 @@ Each run should emit a single “result” log entry with a `reason` code. Keep 
 
 - The plugin should fail fast on configuration/credential issues.
 - Network/API failures should produce a clear Notice and a single non-sensitive log entry.
-- If writing the report fails, do not partially overwrite the existing file; write to a temporary path then replace.
+- If writing the report fails, the plugin reports the error and clears the run state.
 
 ---
 
@@ -316,4 +318,11 @@ Create `src/deep_research.ts` to:
 - If Gemini credentials are missing, abort with Notice + log.
 - On success, create/update the Markdown report and show a completion Notice.
 - Logs must not contain sensitive information.
+
+---
+
+## Attribution and license
+
+This plugin is based on the official Obsidian sample plugin and is distributed under the 0BSD license.
+See `LICENSE` for details.
 
