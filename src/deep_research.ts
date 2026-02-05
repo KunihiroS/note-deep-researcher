@@ -49,7 +49,7 @@ export class DeepResearchService {
             // For now, let's block or ask to reset. The UI part is in main.ts. 
             // Here we assume startResearch is called after confirmation if needed.
             // But if called directly, we should probably fail if busy.
-             new Notice(`Deep Research is already running for ${settings.currentRun.noteBasename}. Please reset/abandon first.`);
+             new Notice(`Deep research is already running for ${settings.currentRun.noteBasename}. Please reset/abandon first.`);
              return;
         }
 
@@ -118,7 +118,7 @@ export class DeepResearchService {
             this.plugin.settings.currentRun = null;
             await this.plugin.saveSettings();
             this.stopPolling();
-            new Notice(`Deep Research run for ${noteName} abandoned.`);
+            new Notice(`Deep research run for ${noteName} abandoned.`);
             void this.log('DR_ABANDONED', `Run for ${noteName} abandoned`);
         } else {
             new Notice('No active run to abandon.');
@@ -154,7 +154,7 @@ export class DeepResearchService {
         // Notice Loop
         this.noticeIntervalId = window.setInterval(() => {
             if (this.plugin.settings.currentRun) {
-                new Notice(`Deep Research in progress for ${this.plugin.settings.currentRun.noteBasename}...`);
+                new Notice(`Deep research in progress for ${this.plugin.settings.currentRun.noteBasename}...`);
             }
         }, noticeInterval);
     }
@@ -227,11 +227,11 @@ export class DeepResearchService {
                 await this.app.vault.create(reportFile, finalContent);
             }
 
-            new Notice(`Deep Research completed for ${runState.noteBasename}. Saved to ${reportFile}`);
+            new Notice(`Deep research completed for ${runState.noteBasename}. Saved to ${reportFile}`);
             void this.log('DR_OK', `Completed for ${runState.noteBasename}`);
 
         } catch (e) {
-            new Notice(`Deep Research completed but failed to save report: ${String(e)}`);
+            new Notice(`Deep research completed but failed to save report: ${String(e)}`);
             void this.log('DR_WRITE_FAILED', `Write failed: ${String(e)}`);
         } finally {
             // Clear run state
@@ -242,7 +242,7 @@ export class DeepResearchService {
 
     private async handleFailure(runState: DeepResearchRunState, error: string) {
         this.stopPolling();
-        new Notice(`Deep Research failed for ${runState.noteBasename}: ${error}`);
+        new Notice(`Deep research failed for ${runState.noteBasename}: ${error}`);
         void this.log('DR_REQUEST_FAILED', `Run failed: ${error}`);
         
         this.plugin.settings.currentRun = null;

@@ -84,7 +84,7 @@ export default class NoteDeepResearcherPlugin extends Plugin {
 			// Since we can't easily pop a native confirmation dialog with custom buttons in Obsidian API simply (without custom Modal),
 			// I'll implement a simple Modal for confirmation.
 			new ConfirmationModal(this.app, 
-				`Deep Research is running for ${this.settings.currentRun.noteBasename}. Abandon it?`,
+				`Deep research is running for ${this.settings.currentRun.noteBasename}. Abandon it?`,
 				'Abandon',
 				'Keep running',
 				async () => {
