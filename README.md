@@ -134,13 +134,14 @@ Contents:
 ```dotenv
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=...
-GEMINI_MODEL=...
+GEMINI_AGENT=deep-research-pro-preview-12-2025
 ```
 
 ### Behavior
 
 - If `LLM_PROVIDER != gemini`, the run is blocked (Notice + log).
-- If `GEMINI_API_KEY` or `GEMINI_MODEL` is missing, the run is blocked (Notice + log).
+- If `GEMINI_API_KEY` is missing, the run is blocked (Notice + log).
+- `GEMINI_AGENT` is optional. If not set, the plugin uses `deep-research-pro-preview-12-2025`.
 
 ### Security
 

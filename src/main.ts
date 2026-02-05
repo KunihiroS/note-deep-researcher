@@ -12,7 +12,7 @@ export default class NoteDeepResearcherPlugin extends Plugin {
 		this.service = new DeepResearchService(this.app, this);
 
 		// Ribbon Icon
-		this.addRibbonIcon('search', 'Run deep research on active note', (evt: MouseEvent) => {
+		this.addRibbonIcon('scan-search', 'Run deep research on active note', (evt: MouseEvent) => {
 			void this.runDeepResearch();
 		});
 
