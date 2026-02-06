@@ -1,9 +1,9 @@
 {
 	"id": "note-deep-researcher",
 	"name": "Note Deep Researcher",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
-	"description": "Simple Deep Research runner for Obsidian notes.",
+	"description": "Simple deep research runner for notes.",
 	"author": "KunihiroS",
 	"authorUrl": "https://github.com/KunihiroS",
 	"fundingUrl": "https://github.com/sponsors/KunihiroS",
