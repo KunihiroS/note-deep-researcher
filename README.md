@@ -1,5 +1,5 @@
 # note-deep-researcher
-
+![note-deep-researcher](assets/Gemini_Generated_Image_79ckhl79ckhl79ck.png)
 Simple “Deep Research” runner for Obsidian notes.
 
 This plugin lets you manually run a Gemini-based deep research workflow against the **currently active note** and save the resulting research report into your Vault.
